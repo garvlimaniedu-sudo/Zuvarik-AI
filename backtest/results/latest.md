@@ -1,11 +1,11 @@
 # Zuvarik AI — Backtest Report (BTCUSDT)
 
-Generated: 2026-08-08T17:48:36.743916+00:00
+Generated: 2026-08-08T17:56:23.510539+00:00
 
-Total signals logged: 10072 (BUY/SELL: 3423)
+Total signals logged: 43192 (BUY/SELL: 14728)
 
 | Horizon | Accuracy | Correct | Wrong | Not yet resolvable |
 |---|---|---|---|---|
-| 1h | 47.8% | 1631 | 1780 | 12 |
-| 4h | 51.4% | 1734 | 1641 | 48 |
-| 24h | 31.6% | 953 | 2059 | 411 |
+| 1h | 47.1% | 6937 | 7779 | 12 |
+| 4h | 49.3% | 7237 | 7445 | 46 |
+| 24h | 46.8% | 6700 | 7614 | 414 |
