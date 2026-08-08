@@ -10,7 +10,13 @@ import time
 import urllib.request
 import urllib.error
 
-BASE_URL = "https://api.binance.com/api/v3/klines"
+BASE_URL = "https://api.binance.us/api/v3/klines"
+# NOTE: GitHub Actions runners are hosted in the US/global cloud regions, and
+# api.binance.com blocks those with HTTP 451 (Binance restricts "Restricted
+# Locations" including the US per its ToS). api.binance.us is the US-compliant
+# mirror with the identical /api/v3/klines response shape, so nothing else here
+# needs to change. If running locally from a non-restricted location, either
+# URL works.
 MAX_LIMIT = 1000  # Binance hard cap per call
 
 
