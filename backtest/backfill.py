@@ -7,6 +7,7 @@ ever see the product.
 Usage:
     python3 backfill.py --source sample --asset BTCUSDT --n 2000
     python3 backfill.py --source binance --asset BTCUSDT --limit 1000
+    python3 backfill.py --source binance --asset BTCUSDT --days 30   # paginated, real multi-week history
 """
 
 import argparse
@@ -52,6 +53,7 @@ def run(klines, asset):
         )
 
     print(f"Backfilled {len(klines) - 8} candles for {asset}: {logged}")
+    return logged
 
 
 if __name__ == "__main__":
@@ -59,7 +61,8 @@ if __name__ == "__main__":
     parser.add_argument("--source", choices=["sample", "binance"], default="sample")
     parser.add_argument("--asset", default="BTCUSDT")
     parser.add_argument("--n", type=int, default=2000, help="candle count (sample source)")
-    parser.add_argument("--limit", type=int, default=1000, help="candle count (binance source, max 1000/call)")
+    parser.add_argument("--limit", type=int, default=1000, help="candle count (binance source, single call, max 1000)")
+    parser.add_argument("--days", type=float, default=None, help="binance source: pull this many days of real 1m history via pagination (overrides --limit)")
     args = parser.parse_args()
 
     if args.source == "sample":
@@ -68,6 +71,12 @@ if __name__ == "__main__":
         print(f"[local dev] Using synthetic sample data — not a real accuracy number.")
     else:
         import fetch_binance
-        klines = fetch_binance.fetch_klines(args.asset, interval="1m", limit=args.limit)
+        if args.days is not None:
+            total_candles = int(args.days * 24 * 60)  # 1m candles
+            print(f"Fetching ~{args.days} days ({total_candles} candles) of real {args.asset} history from Binance (paginated)...")
+            klines = fetch_binance.fetch_klines_paginated(args.asset, interval="1m", total_limit=total_candles)
+            print(f"Fetched {len(klines)} real candles.")
+        else:
+            klines = fetch_binance.fetch_klines(args.asset, interval="1m", limit=args.limit)
 
     run(klines, args.asset)

@@ -1,0 +1,48 @@
+name: Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      asset:
+        description: "Trading pair (e.g. BTCUSDT)"
+        required: false
+        default: "BTCUSDT"
+      days:
+        description: "Days of real 1m history to backtest"
+        required: false
+        default: "14"
+  schedule:
+    - cron: "0 6 * * 1"  # every Monday 06:00 UTC
+
+permissions:
+  contents: write
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run backfill (real Binance data)
+        working-directory: backtest
+        run: |
+          python3 backfill.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}"
+
+      - name: Run evaluate and write report
+        working-directory: backtest
+        run: |
+          python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --out results/latest.md
+
+      - name: Commit results
+        run: |
+          git config user.name "zuvarik-backtest-bot"
+          git config user.email "actions@github.com"
+          git add backtest/results/latest.md
+          git diff --staged --quiet || git commit -m "chore: update backtest results [automated]"
+          git push
