@@ -70,7 +70,8 @@ if __name__ == "__main__":
         klines = generate_sample_data.generate_klines(symbol=args.asset, n=args.n)
     else:
         import fetch_binance
-        klines = fetch_binance.fetch_klines_range(args.asset, interval="1m", days=args.days)
+        total_candles = int(args.days * 24 * 60)
+        klines = fetch_binance.fetch_klines_paginated(args.asset, interval="1m", total_limit=total_candles)
 
     print(f"=== Baseline check — {args.asset}, {len(klines)} candles ===")
     print("(compare these against v1's reported 48-51% — if a baseline matches or beats it, v1 adds nothing)")

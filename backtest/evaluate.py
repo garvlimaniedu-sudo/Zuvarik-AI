@@ -9,6 +9,7 @@ Usage (must match the same source/asset used in backfill.py so timestamps line u
     python3 evaluate.py --source binance --asset BTCUSDT --days 30
 
 Pass --out results/latest.md to write a markdown report (used by the CI workflow).
+Pass --version v1 (or v2, v2-confirmed) to isolate one engine version's results.
 """
 
 import argparse
@@ -36,7 +37,7 @@ def find_future_price(ordered, index_by_ts, signal_ts, minutes_ahead):
     return ordered[target_idx][1]
 
 
-def run(klines, asset):
+def run(klines, asset, engine_version=None):
     ordered = []
     ts_to_idx = {}
     for i, k in enumerate(klines):
@@ -45,6 +46,8 @@ def run(klines, asset):
         ts_to_idx[iso] = i
 
     rows = [r for r in db.all_rows() if r["asset"] == asset]
+    if engine_version:
+        rows = [r for r in rows if r["engine_version"] == engine_version]
     results = {h: {"CORRECT": 0, "WRONG": 0, "N-A": 0} for h in HORIZONS}
 
     for row in rows:
@@ -70,8 +73,9 @@ def run(klines, asset):
     total_signals = len(rows)
     buy_sell = sum(1 for r in rows if r["verdict"] in ("BUY", "SELL"))
 
+    version_label = f" — engine {engine_version}" if engine_version else " — all versions"
     lines = []
-    lines.append(f"# Zuvarik AI — Backtest Report ({asset})\n")
+    lines.append(f"# Zuvarik AI — Backtest Report ({asset}{version_label})\n")
     lines.append(f"Generated: {datetime.now(timezone.utc).isoformat()}\n")
     lines.append(f"Total signals logged: {total_signals} (BUY/SELL: {buy_sell})\n")
     lines.append("| Horizon | Accuracy | Correct | Wrong | Not yet resolvable |")
@@ -83,7 +87,7 @@ def run(klines, asset):
         lines.append(f"| {horizon} | {acc:.1f}% | {c} | {w} | {na} |")
     report = "\n".join(lines) + "\n"
 
-    print(f"\n=== Zuvarik AI — Backtest Report ({asset}) ===")
+    print(f"\n=== Zuvarik AI — Backtest Report ({asset}{version_label}) ===")
     for horizon in HORIZONS:
         c, w, na = results[horizon]["CORRECT"], results[horizon]["WRONG"], results[horizon]["N-A"]
         total = c + w
@@ -102,6 +106,7 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--days", type=float, default=None)
     parser.add_argument("--out", default=None, help="path to write markdown report, e.g. results/latest.md")
+    parser.add_argument("--version", default=None, help="filter to one engine_version, e.g. v1, v2, v2-confirmed")
     args = parser.parse_args()
 
     if args.source == "sample":
@@ -115,7 +120,7 @@ if __name__ == "__main__":
         else:
             klines = fetch_binance.fetch_klines(args.asset, interval="1m", limit=args.limit)
 
-    report = run(klines, args.asset)
+    report = run(klines, args.asset, engine_version=args.version)
 
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
