@@ -144,3 +144,4 @@ if __name__ == "__main__":
         klines = fetch_binance.fetch_klines_paginated(args.asset, interval="1m", total_limit=total_candles)
 
     run(klines, args.asset)
+    db.close()
