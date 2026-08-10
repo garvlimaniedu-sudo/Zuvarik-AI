@@ -75,12 +75,17 @@ def run(klines, asset):
             rejections["reversed_at_15"] += 1
             continue
 
-        # confirmed — log at the confirmation point, not the original candle
+        # confirmed — log at the confirmation point, not the original candle.
+        # Tag engine_version as "v2-confirmed" (not the plain "v2" that
+        # compute_signal() returns) so evaluate.py --version v2-confirmed
+        # can actually isolate these rows from plain single-shot v2 signals.
         confirm_idx = i + RECHECK_2
+        confirmed_sig = dict(check2)
+        confirmed_sig["engine_version"] = "v2-confirmed"
         db.insert_signal(
             asset=asset,
             signal_ts=ms_to_iso(klines[confirm_idx]["open_time"]),
-            sig=check2,
+            sig=confirmed_sig,
             price_at_signal=klines[confirm_idx]["close"],
             news_bias=0.0,
         )

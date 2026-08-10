@@ -11,8 +11,16 @@ on:
         description: "Days of real 1m history to backtest"
         required: false
         default: "14"
+      mode:
+        description: "v1-only (fast, original engine) or compare (v1 + v2-confirmed head-to-head, slower)"
+        required: false
+        default: "v1-only"
+        type: choice
+        options:
+          - v1-only
+          - compare
   schedule:
-    - cron: "0 6 * * 1"  # every Monday 06:00 UTC
+    - cron: "0 6 * * 1"  # every Monday 06:00 UTC, v1-only
 
 permissions:
   contents: write
@@ -29,20 +37,49 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run backfill (real Binance data)
+      - name: Run v1 backfill (real Binance data)
         working-directory: backtest
         run: |
           python3 backfill.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}"
 
-      - name: Run evaluate and write report
+      - name: Run v1 evaluate
         working-directory: backtest
         run: |
-          python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --out results/latest.md
+          python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --version v1 --out results/v1.md
+
+      - name: Run v2 confirmation pipeline (compare mode only)
+        if: ${{ github.event.inputs.mode == 'compare' }}
+        working-directory: backtest
+        run: |
+          python3 confirm_pipeline.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}"
+
+      - name: Run v2-confirmed evaluate (compare mode only)
+        if: ${{ github.event.inputs.mode == 'compare' }}
+        working-directory: backtest
+        run: |
+          python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --version v2-confirmed --out results/v2-confirmed.md
+
+      - name: Build combined comparison report
+        working-directory: backtest
+        run: |
+          {
+            echo "# Zuvarik AI — Backtest Results"
+            echo ""
+            echo "Asset: ${{ github.event.inputs.asset || 'BTCUSDT' }} | Window: ${{ github.event.inputs.days || '14' }} days | Mode: ${{ github.event.inputs.mode || 'v1-only' }}"
+            echo ""
+            cat results/v1.md
+            if [ -f results/v2-confirmed.md ]; then
+              echo ""
+              cat results/v2-confirmed.md
+            fi
+          } > results/latest.md
+          cat results/latest.md
 
       - name: Commit results
         run: |
           git config user.name "zuvarik-backtest-bot"
           git config user.email "actions@github.com"
-          git add backtest/results/latest.md
+          git add backtest/results/latest.md backtest/results/v1.md
+          git add backtest/results/v2-confirmed.md 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: update backtest results [automated]"
           git push
