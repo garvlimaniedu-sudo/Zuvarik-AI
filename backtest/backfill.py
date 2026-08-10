@@ -80,3 +80,4 @@ if __name__ == "__main__":
             klines = fetch_binance.fetch_klines(args.asset, interval="1m", limit=args.limit)
 
     run(klines, args.asset)
+    db.close()

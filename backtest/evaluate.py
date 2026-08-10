@@ -121,6 +121,7 @@ if __name__ == "__main__":
             klines = fetch_binance.fetch_klines(args.asset, interval="1m", limit=args.limit)
 
     report = run(klines, args.asset, engine_version=args.version)
+    db.close()
 
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
