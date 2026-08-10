@@ -12,13 +12,14 @@ on:
         required: false
         default: "14"
       mode:
-        description: "v1-only (fast, original engine) or compare (v1 + v2-confirmed head-to-head, slower)"
+        description: "v1-only, compare (v1+v2-confirmed), or v3 (v1+v3 walk-forward model, slowest)"
         required: false
         default: "v1-only"
         type: choice
         options:
           - v1-only
           - compare
+          - v3
   schedule:
     - cron: "0 6 * * 1"  # every Monday 06:00 UTC, v1-only
 
@@ -59,6 +60,20 @@ jobs:
         run: |
           python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --version v2-confirmed --out results/v2-confirmed.md
 
+      - name: Run v3 walk-forward training (v3 mode only, timed)
+        if: ${{ github.event.inputs.mode == 'v3' }}
+        working-directory: backtest
+        run: |
+          echo "V3_TRAIN_START: $(date -u +%s)"
+          python3 train_v3.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}"
+          echo "V3_TRAIN_END: $(date -u +%s)"
+
+      - name: Run v3 evaluate (v3 mode only)
+        if: ${{ github.event.inputs.mode == 'v3' }}
+        working-directory: backtest
+        run: |
+          python3 evaluate.py --source binance --asset "${{ github.event.inputs.asset || 'BTCUSDT' }}" --days "${{ github.event.inputs.days || '14' }}" --version v3 --out results/v3.md
+
       - name: Build combined comparison report
         working-directory: backtest
         run: |
@@ -72,6 +87,10 @@ jobs:
               echo ""
               cat results/v2-confirmed.md
             fi
+            if [ -f results/v3.md ]; then
+              echo ""
+              cat results/v3.md
+            fi
           } > results/latest.md
           cat results/latest.md
 
@@ -81,5 +100,6 @@ jobs:
           git config user.email "actions@github.com"
           git add backtest/results/latest.md backtest/results/v1.md
           git add backtest/results/v2-confirmed.md 2>/dev/null || true
+          git add backtest/results/v3.md 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: update backtest results [automated]"
           git push
