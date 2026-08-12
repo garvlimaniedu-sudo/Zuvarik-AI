@@ -2,12 +2,18 @@
 v3: walk-forward trained logistic regression, triple-barrier labeled.
 
 Critical rule this script exists to enforce: the model NEVER sees a test
-fold's data during its own training. It's trained fold-by-fold on an
-expanding window of the past, then only ever predicts on the fold
-immediately after — the same constraint a live deployment would face
-(you can't train on the future). This is what "walk-forward" means and
-why it's the honest way to validate a fitted model, unlike a single
-train/test split on the whole history.
+fold's data during its own training. It's trained fold-by-fold on a FIXED
+ROLLING window of the most recent past (see ROLLING_DAYS), then only ever
+predicts on the fold immediately after — the same constraint a live
+deployment would face (you can't train on the future). This is what
+"walk-forward" means and why it's the honest way to validate a fitted
+model, unlike a single train/test split on the whole history.
+
+Fix history: this used to train each fold on an EXPANDING window (all
+history since the start). That caused later folds to blend multiple market
+regimes together with no way to distinguish them, collapsing predicted
+probabilities toward 0.5 and killing signal volume in later folds — see
+run()'s docstring for the full explanation. Now fixed to a rolling window.
 
 Logs predictions to signal_log as engine_version "v3" — reuses evaluate.py
 unchanged for the final accuracy report (run it with --version v3 after
@@ -34,6 +40,7 @@ MAX_HOLD = 30          # triple-barrier time limit, in candles
 TP_PCT = 0.003         # 0.3% take-profit barrier
 SL_PCT = 0.003         # 0.3% stop-loss barrier
 FOLDS = 5              # walk-forward folds
+ROLLING_DAYS = 25      # fixed training window size, in days (not expanding) — see run() docstring
 BUY_THRESHOLD = 0.60   # predicted probability above this -> BUY
 SELL_THRESHOLD = 0.40  # predicted probability below this -> SELL
 
@@ -62,9 +69,28 @@ def build_training_set(candles, start, end):
 
 
 def run(klines, asset):
+    """
+    Rolling-window walk-forward (fixed, not expanding).
+
+    Earlier version trained each fold on ALL accumulated history since the
+    start (an expanding window). That caused a real bug: by fold 4, the
+    model was blending ~4/5ths of the full 90-day history into one training
+    set, mixing multiple market regimes with no way to tell them apart.
+    Predicted probabilities collapsed toward 0.5 (the neutral zone) as a
+    result — later folds fired almost no BUY/SELL signals at all, so a
+    reported headline accuracy was really just fold 1's small-window result
+    wearing a 90-day label.
+
+    Fix: cap the training window at ROLLING_DAYS of the most recent history
+    before each fold's test period, instead of letting it grow unbounded.
+    This keeps every fold training on a similarly-sized, more homogeneous
+    slice of time — standard practice for non-stationary data like crypto.
+    """
     db.init_db()
     n = len(klines)
     fold_bounds = [int(n * i / FOLDS) for i in range(FOLDS + 1)]
+    candles_per_day = 24 * 60  # 1m candles
+    rolling_candles = ROLLING_DAYS * candles_per_day
 
     total_logged = {"BUY": 0, "SELL": 0, "HOLD": 0}
     total_train_examples = 0
@@ -73,8 +99,16 @@ def run(klines, asset):
         train_end = fold_bounds[k]
         test_start, test_end = fold_bounds[k], fold_bounds[k + 1]
 
-        # expanding window: train on everything before this fold, not just the previous one
-        X_train, y_train = build_training_set(klines, LOOKBACK, train_end)
+        # fixed rolling window: only the most recent ROLLING_DAYS before this
+        # fold's test period, NOT everything since the start (that was the bug)
+        train_start = max(LOOKBACK, train_end - rolling_candles)
+        X_train, y_train = build_training_set(klines, train_start, train_end)
+
+        pos = sum(1 for lbl in y_train if lbl == 1)
+        neg = len(y_train) - pos
+        print(f"Fold {k}: label balance — {pos} positive (TP-hit) / {neg} negative (SL-hit) "
+              f"({pos / len(y_train) * 100:.1f}% positive)" if y_train else f"Fold {k}: no labeled examples.")
+
         if len(X_train) < 30 or len(set(y_train)) < 2:
             print(f"Fold {k}: not enough labeled examples ({len(X_train)}) or only one class — skipping.")
             continue
