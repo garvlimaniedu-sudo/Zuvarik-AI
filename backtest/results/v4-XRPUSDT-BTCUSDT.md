@@ -1,11 +1,11 @@
 # Zuvarik AI — Backtest Report (XRPBTC — engine v4)
 
-Generated: 2026-08-13T05:53:24.212441+00:00
+Generated: 2026-08-13T05:58:18.843625+00:00
 
-Total signals logged: 11377 (BUY/SELL: 11377)
+Total signals logged: 32993 (BUY/SELL: 32993)
 
 | Horizon | Accuracy | Correct | Wrong | Not yet resolvable |
 |---|---|---|---|---|
-| 1h | 60.0% | 6821 | 4539 | 17 |
-| 4h | 56.5% | 6388 | 4927 | 62 |
-| 24h | 51.7% | 5689 | 5308 | 380 |
+| 1h | 60.3% | 19870 | 13107 | 16 |
+| 4h | 56.5% | 18593 | 14338 | 62 |
+| 24h | 53.2% | 17366 | 15250 | 377 |
