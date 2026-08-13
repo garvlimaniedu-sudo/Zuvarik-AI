@@ -1,12 +1,21 @@
 """
-v4: relative-value (ETH/BTC ratio) mean-reversion — walk-forward tested.
+v4: relative-value (cross-asset ratio) mean-reversion — walk-forward tested.
 
-Fetches BTCUSDT and ETHUSDT klines for the same real time window, aligns
-them by timestamp, builds the ETH/BTC ratio series, and walk-forward
-evaluates the z-score mean-reversion rule from scoring_v4.py against real
-triple-barrier-labeled outcomes on the ratio's own future path (not either
-asset's raw price — a "correct" v4 call is about the ratio moving the
-predicted direction, not BTC or ETH's absolute price).
+Originally built and validated on ETH/BTC (see backtest/results/v4.md from
+that run: 62.1-62.6% at 1h, 56.7-57.3% at 4h, 53.3-53.5% at 24h, consistent
+across independent 30-day and 90-day windows). Generalized here to any two
+assets via --base_asset/--quote_asset, to test whether the mean-reverting
+ratio structure that worked for ETH/BTC generalizes to other pairs
+(BNB/ETH, XRP/BTC) or was specific to that one pair — a single working pair
+is a finding about one relationship, not yet evidence the underlying idea
+(correlated-asset ratios mean-revert) is a general one worth building on.
+
+Fetches base_asset and quote_asset klines for the same real time window,
+aligns them by timestamp, builds the quote/base ratio series, and
+walk-forward evaluates the z-score mean-reversion rule from scoring_v4.py
+against real triple-barrier-labeled outcomes on the ratio's own future path
+(not either asset's raw price — a "correct" v4 call is about the ratio
+moving the predicted direction, not either asset's absolute price).
 
 Design choices worth reading before changing:
 
@@ -45,7 +54,9 @@ Design choices worth reading before changing:
    fine for a first honest test of the underlying idea.
 
 Usage:
-    python3 train_v4.py --source binance --days 90
+    python3 train_v4.py --source binance --base_asset BTCUSDT --quote_asset ETHUSDT --days 90
+    python3 train_v4.py --source binance --base_asset ETHUSDT --quote_asset BNBUSDT --days 90
+    python3 train_v4.py --source binance --base_asset BTCUSDT --quote_asset XRPUSDT --days 90
     python3 train_v4.py --source sample --n 4000     (offline pipeline smoke test only)
 """
 
@@ -68,19 +79,22 @@ def ms_to_iso(ms):
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
 
 
-def align_klines(btc_klines, eth_klines):
+def align_klines(base_klines, quote_klines):
     """Intersect two independently-fetched kline series on open_time so a
     gap or listing mismatch on either side can never misalign the ratio.
-    Returns (aligned_open_times, aligned_ratios, btc_by_time, eth_by_time)."""
-    btc_by_time = {k["open_time"]: k for k in btc_klines}
-    eth_by_time = {k["open_time"]: k for k in eth_klines}
-    common_times = sorted(set(btc_by_time) & set(eth_by_time))
+    Generalized from the original BTC/ETH-only version (device 2's earlier
+    session) to work with any two assets — e.g. base=ETHUSDT/quote=BNBUSDT
+    for BNB/ETH, or base=BTCUSDT/quote=XRPUSDT for XRP/BTC.
+    Returns (aligned_open_times, aligned_ratios). Ratio = quote_close / base_close."""
+    base_by_time = {k["open_time"]: k for k in base_klines}
+    quote_by_time = {k["open_time"]: k for k in quote_klines}
+    common_times = sorted(set(base_by_time) & set(quote_by_time))
 
     ratios = []
     for t in common_times:
-        btc_close = btc_by_time[t]["close"]
-        eth_close = eth_by_time[t]["close"]
-        ratios.append(eth_close / btc_close if btc_close else 0)
+        base_close = base_by_time[t]["close"]
+        quote_close = quote_by_time[t]["close"]
+        ratios.append(quote_close / base_close if base_close else 0)
 
     return common_times, ratios
 
@@ -148,8 +162,10 @@ def label_diagnostics(ratio_klines, sample_stride=50):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", choices=["sample", "binance"], default="sample")
-    parser.add_argument("--btc_asset", default="BTCUSDT")
-    parser.add_argument("--eth_asset", default="ETHUSDT")
+    parser.add_argument("--btc_asset", "--base_asset", dest="base_asset", default="BTCUSDT",
+                        help="denominator asset, e.g. BTCUSDT (kept --btc_asset as an alias for backward compatibility with the original ETH/BTC run)")
+    parser.add_argument("--eth_asset", "--quote_asset", dest="quote_asset", default="ETHUSDT",
+                        help="numerator asset, e.g. ETHUSDT (kept --eth_asset as an alias). Ratio computed is quote_asset/base_asset.")
     parser.add_argument("--n", type=int, default=4000, help="candle count (sample source)")
     parser.add_argument("--days", type=float, default=30, help="days of real history (binance source)")
     parser.add_argument("--out", default=None, help="path to write markdown report, e.g. results/v4.md")
@@ -160,25 +176,25 @@ if __name__ == "__main__":
         # two independent synthetic series so the ratio isn't degenerately constant —
         # different seeds via the symbol string, same mechanism generate_sample_data
         # already uses to vary its output.
-        btc_klines = generate_sample_data.generate_klines(symbol=args.btc_asset, n=args.n, start_price=60000)
-        eth_klines = generate_sample_data.generate_klines(symbol=args.eth_asset, n=args.n, start_price=3000)
+        base_klines = generate_sample_data.generate_klines(symbol=args.base_asset, n=args.n, start_price=60000)
+        quote_klines = generate_sample_data.generate_klines(symbol=args.quote_asset, n=args.n, start_price=3000)
         print("[local dev] Using synthetic sample data for both legs — not a real accuracy number.")
     else:
         import fetch_binance
         total_candles = int(args.days * 24 * 60)
-        print(f"Fetching {args.btc_asset} and {args.eth_asset}, ~{args.days} days ({total_candles} candles each)...")
-        btc_klines = fetch_binance.fetch_klines_paginated(args.btc_asset, interval="1m", total_limit=total_candles)
-        eth_klines = fetch_binance.fetch_klines_paginated(args.eth_asset, interval="1m", total_limit=total_candles)
-        print(f"Fetched {len(btc_klines)} {args.btc_asset} candles, {len(eth_klines)} {args.eth_asset} candles.")
+        print(f"Fetching {args.base_asset} and {args.quote_asset}, ~{args.days} days ({total_candles} candles each)...")
+        base_klines = fetch_binance.fetch_klines_paginated(args.base_asset, interval="1m", total_limit=total_candles)
+        quote_klines = fetch_binance.fetch_klines_paginated(args.quote_asset, interval="1m", total_limit=total_candles)
+        print(f"Fetched {len(base_klines)} {args.base_asset} candles, {len(quote_klines)} {args.quote_asset} candles.")
 
-    common_times, ratios = align_klines(btc_klines, eth_klines)
+    common_times, ratios = align_klines(base_klines, quote_klines)
     print(f"Aligned on {len(common_times)} common timestamps "
-          f"({len(btc_klines) - len(common_times)} BTC / {len(eth_klines) - len(common_times)} ETH candles dropped for no counterpart).")
+          f"({len(base_klines) - len(common_times)} {args.base_asset} / {len(quote_klines) - len(common_times)} {args.quote_asset} candles dropped for no counterpart).")
 
     ratio_klines = build_ratio_klines(common_times, ratios)
     label_diagnostics(ratio_klines)
 
-    pair_label = f"{args.eth_asset.replace('USDT','')}{args.btc_asset.replace('USDT','')}"  # e.g. ETHBTC
+    pair_label = f"{args.quote_asset.replace('USDT','')}{args.base_asset.replace('USDT','')}"  # e.g. ETHBTC, BNBETH, XRPBTC
     run(common_times, ratios, ratio_klines, pair_label=pair_label)
     db.close()
 
