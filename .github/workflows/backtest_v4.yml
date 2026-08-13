@@ -3,8 +3,16 @@ name: Backtest v4
 on:
   workflow_dispatch:
     inputs:
+      base_asset:
+        description: "Denominator asset (e.g. BTCUSDT, ETHUSDT)"
+        required: false
+        default: "BTCUSDT"
+      quote_asset:
+        description: "Numerator asset (e.g. ETHUSDT, BNBUSDT, XRPUSDT) — ratio computed is quote/base"
+        required: false
+        default: "ETHUSDT"
       days:
-        description: "Days of real 1m history to test (both BTCUSDT and ETHUSDT)"
+        description: "Days of real 1m history to test"
         required: false
         default: "30"
 
@@ -23,17 +31,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run v4 (ETH/BTC relative-value)
+      - name: Run v4 (relative-value, any pair)
         working-directory: backtest
         run: |
           echo "V4_START: $(date -u +%s)"
-          python3 train_v4.py --source binance --btc_asset BTCUSDT --eth_asset ETHUSDT --days "${{ github.event.inputs.days || '30' }}" --out results/v4.md
+          BASE="${{ github.event.inputs.base_asset || 'BTCUSDT' }}"
+          QUOTE="${{ github.event.inputs.quote_asset || 'ETHUSDT' }}"
+          OUTFILE="results/v4-${QUOTE}-${BASE}.md"
+          python3 train_v4.py --source binance --base_asset "$BASE" --quote_asset "$QUOTE" --days "${{ github.event.inputs.days || '30' }}" --out "$OUTFILE"
           echo "V4_END: $(date -u +%s)"
+          echo "OUTFILE=$OUTFILE" >> $GITHUB_ENV
 
       - name: Commit results
         run: |
           git config user.name "zuvarik-backtest-bot"
           git config user.email "actions@github.com"
-          git add backtest/results/v4.md
-          git diff --staged --quiet || git commit -m "chore: update v4 backtest results [automated]"
+          git add "backtest/${OUTFILE}"
+          git diff --staged --quiet || git commit -m "chore: update v4 backtest results for ${OUTFILE} [automated]"
           git push
