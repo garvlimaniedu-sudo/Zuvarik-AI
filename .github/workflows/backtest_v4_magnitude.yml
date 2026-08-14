@@ -1,0 +1,51 @@
+name: Backtest v4 Magnitude
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_asset:
+        description: "Denominator asset (e.g. BTCUSDT)"
+        required: false
+        default: "BTCUSDT"
+      quote_asset:
+        description: "Numerator asset (e.g. ETHUSDT)"
+        required: false
+        default: "ETHUSDT"
+      days:
+        description: "Days of real 1m history to test"
+        required: false
+        default: "90"
+
+permissions:
+  contents: write
+
+jobs:
+  optimize_v4_magnitude:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run v4 magnitude optimization sweep
+        working-directory: backtest
+        run: |
+          echo "SWEEP_START: $(date -u +%s)"
+          BASE="${{ github.event.inputs.base_asset || 'BTCUSDT' }}"
+          QUOTE="${{ github.event.inputs.quote_asset || 'ETHUSDT' }}"
+          OUTFILE="results/v4-magnitude-${QUOTE}-${BASE}.md"
+          python3 optimize_v4_magnitude.py --source binance --base_asset "$BASE" --quote_asset "$QUOTE" --days "${{ github.event.inputs.days || '90' }}" --out "$OUTFILE"
+          echo "SWEEP_END: $(date -u +%s)"
+          echo "OUTFILE=$OUTFILE" >> $GITHUB_ENV
+
+      - name: Commit results
+        run: |
+          git config user.name "zuvarik-backtest-bot"
+          git config user.email "actions@github.com"
+          git add "backtest/${OUTFILE}"
+          git diff --staged --quiet || git commit -m "chore: update v4 magnitude sweep for ${OUTFILE} [automated]"
+          git push
