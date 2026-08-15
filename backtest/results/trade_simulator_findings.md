@@ -50,3 +50,25 @@ needs the same treatment across more periods before trusting it.
 
 The simulator is asset-agnostic — feed it any two candle series. See
 `trade_simulator.py`'s docstring for the interface.
+
+## Crash week (Jan 31 - Feb 7, 2026), real economic simulation — added later
+
+Same crash week as the earlier stress test, now run through the actual
+trade simulator (not just directional accuracy).
+
+**Single-leg-cost economics (the near-breakeven setup from the 30-day test):**
+- n=3,040 trades, win rate 65.1%, expectancy **-0.0746%/trade**
+- Max consecutive losses: 14 (vs. 32 under the old fixed-horizon method —
+  confirms a real simulator with actual stop-losses meaningfully caps streak
+  severity, as expected)
+
+**Standard two-leg-cost economics:**
+- Expectancy **-0.555%/trade**, every single trade net-negative after cost
+  (win rate 0% — no trade's gross move cleared the ~0.6% round-trip cost)
+
+Honest read: directional accuracy held up fine in the crash (62%/56%/55%,
+matching calm conditions), but the *economic* edge got measurably worse
+during the crash under the near-breakeven single-leg setup (-0.075%/trade
+vs. -0.017%/trade in the calm 30-day test) — the SL hit rate was higher
+relative to TP during the volatile week. Directional accuracy alone would
+have hidden this.
