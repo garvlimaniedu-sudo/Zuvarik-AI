@@ -4,15 +4,15 @@ Asset: BTCUSDT | Window: 14 days | Mode: v1-only
 
 # Zuvarik AI — Backtest Report (BTCUSDT — engine v1)
 
-Generated: 2026-09-14T11:17:31.031447+00:00
+Generated: 2026-09-21T11:30:13.075503+00:00
 
-Total signals logged: 20049 (BUY/SELL: 7159)
+Total signals logged: 20152 (BUY/SELL: 7366)
 
 | Horizon | Accuracy | Correct | Wrong | Not yet resolvable |
 |---|---|---|---|---|
-| 1h | 48.4% | 3460 | 3686 | 13 |
-| 4h | 47.7% | 3387 | 3707 | 65 |
-| 24h | 54.5% | 3683 | 3073 | 403 |
+| 1h | 46.5% | 3417 | 3931 | 18 |
+| 4h | 43.8% | 3184 | 4078 | 104 |
+| 24h | 48.0% | 3284 | 3561 | 521 |
 
 # Zuvarik AI — Backtest Report (BTCUSDT — engine v2-confirmed)
 
